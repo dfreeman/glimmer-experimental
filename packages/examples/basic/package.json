@@ -17,7 +17,7 @@
     "basic-addon": "0.2.3"
   },
   "devDependencies": {
-    "@glimmer/interfaces": "^0.50.1",
+    "@glimmer/interfaces": "^0.61.1",
     "@glimmerx/storybook": "^0.2.3"
   },
   "volta": {
