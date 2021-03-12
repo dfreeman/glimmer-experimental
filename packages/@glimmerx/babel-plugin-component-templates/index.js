@@ -106,6 +106,8 @@ function getTemplateTokens(html, nativeTokens) {
   return Array.from(tokensSet);
 }
 
+const hasOwnProperty = Function.prototype.call.bind(Object.prototype.hasOwnProperty);
+
 module.exports = function (babel, options) {
   const { types: t, parse } = babel;
   const {
@@ -121,6 +123,8 @@ module.exports = function (babel, options) {
 
     templateOnlyComponentPath = '@glimmer/core',
     templateOnlyComponentName = ember ? '_templateOnlyComponent' : 'templateOnlyComponent',
+
+    templateTags = { '@glimmerx/component': ['hbs'] },
 
     precompile: precompileOptions = {},
 
@@ -195,6 +199,8 @@ module.exports = function (babel, options) {
 
           bindings.forEach((b) => b.reference(firstNode));
 
+          state.hbsImportIds = new Set();
+
           // save the node and original bindings off to remove on exit
           state.originalBindings = bindings;
           state.emptyPath = firstNode;
@@ -218,13 +224,14 @@ module.exports = function (babel, options) {
       },
 
       ImportSpecifier(path, state) {
-        if (state.hbsImportId || path.parent.source.value !== '@glimmerx/component') {
+        if (!hasOwnProperty(templateTags, path.parent.source.value)) {
           return;
         }
+        const tagNames = templateTags[path.parent.source.value];
         const importedName = path.node.imported.name;
         const localName = path.node.local.name;
-        if (importedName === 'hbs') {
-          state.hbsImportId = localName;
+        if (tagNames.includes(importedName)) {
+          state.hbsImportIds.add(localName);
           // remove the hbs named import
           if (path.parentPath.node.specifiers.length > 1) {
             path.remove();
@@ -236,7 +243,7 @@ module.exports = function (babel, options) {
 
       ClassExpression(path, state) {
         const classBody = path.get('body').get('body');
-        const templateProp = findTemplateProperty(classBody, state.hbsImportId);
+        const templateProp = findTemplateProperty(classBody, state.hbsImportIds);
 
         if (templateProp) {
           insertTemplateWrapper(path.scope.getProgramParent().path, path, templateProp, state);
@@ -246,7 +253,7 @@ module.exports = function (babel, options) {
 
       ClassDeclaration(path, state) {
         const classBody = path.get('body').get('body');
-        const templateProp = findTemplateProperty(classBody, state.hbsImportId);
+        const templateProp = findTemplateProperty(classBody, state.hbsImportIds);
 
         if (templateProp) {
           insertTemplateWrapper(path.scope.getProgramParent().path, path, templateProp, state);
@@ -255,7 +262,7 @@ module.exports = function (babel, options) {
       },
 
       TaggedTemplateExpression(path, state) {
-        if (path.node.tag.name !== state.hbsImportId) {
+        if (!state.hbsImportIds.has(path.node.tag.name)) {
           return;
         }
 
@@ -278,13 +285,13 @@ module.exports = function (babel, options) {
     },
   };
 
-  function findTemplateProperty(classBody, hbsImportId) {
+  function findTemplateProperty(classBody, hbsImportIds) {
     return classBody.find((propPath) => {
       return (
         propPath.node.static &&
         propPath.node.key.name === 'template' &&
         propPath.node.value.type === 'TaggedTemplateExpression' &&
-        propPath.node.value.tag.name === hbsImportId
+        hbsImportIds.has(propPath.node.value.tag.name)
       );
     });
   }

@@ -1,0 +1,6 @@
+{
+  "templateTags": {
+    "@some-other/package": ["hbs1", "hbs2"],
+    "@else/where": ["hbs3"]
+  }
+}
